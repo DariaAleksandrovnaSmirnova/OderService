@@ -1,0 +1,39 @@
+spring:
+  profiles:
+    active: dev, test
+  datasource:
+    url: jdbc:postgresql://localhost:5432/order_service_db
+    username: daria
+    password: password
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  redis:
+    host: localhost
+    port: 6379
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+server:
+  port: 8082
+
+logging:
+  level:
+    root: info
+
+user-service:
+  host: localhost
+  port: 8080
+
+auth-service:
+  host: localhost
+  port: 8081
