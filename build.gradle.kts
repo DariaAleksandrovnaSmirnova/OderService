@@ -4,7 +4,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.4"
 }
 
-group = "org.example"
+group = "by.innowise"
 version = "1.0-SNAPSHOT"
 
 repositories {
