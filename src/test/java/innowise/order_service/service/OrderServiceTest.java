@@ -1,5 +1,6 @@
 package innowise.order_service.service;
 
+import innowise.common.event.OrderEvent;
 import innowise.order_service.client.UserServiceClient;
 import innowise.order_service.dto.OrderItemRequestDto;
 import innowise.order_service.dto.OrderRequestDto;
@@ -10,6 +11,7 @@ import innowise.order_service.dto.client.UserDto;
 import innowise.order_service.entity.Item;
 import innowise.order_service.entity.Order;
 import innowise.order_service.entity.OrderItem;
+import innowise.order_service.kafka.KafkaOrderProducer;
 import innowise.order_service.mapper.OrderMapperImpl;
 import innowise.order_service.repository.OrderItemRepository;
 import innowise.order_service.repository.OrderRepository;
@@ -55,6 +57,9 @@ class OrderServiceTest {
     @Mock
     private OrderItemRepository orderItemRepository;
 
+    @Mock
+    private KafkaOrderProducer kafkaOrderProducer;
+
     @InjectMocks
     private OrderService orderService;
 
@@ -75,6 +80,7 @@ class OrderServiceTest {
     void setUp() {
         item = Item.builder()
                 .id(ITEM_ID)
+                .price(3.00)
                 .build();
 
         OrderItem orderItem = OrderItem.builder()
@@ -132,6 +138,7 @@ class OrderServiceTest {
         verify(orderMapper).toEntity(orderRequestDto);
         verify(orderRepository).save(any(Order.class));
         verify(orderMapper).toDto(order);
+        verify(kafkaOrderProducer).sendCreateOrder(any(OrderEvent.class));
     }
 
     @Test
