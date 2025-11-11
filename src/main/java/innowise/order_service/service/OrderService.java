@@ -1,5 +1,7 @@
 package innowise.order_service.service;
 
+import innowise.common.event.OrderEvent;
+import innowise.common.event.PaymentEvent;
 import innowise.order_service.client.UserServiceClient;
 import innowise.order_service.dto.OrderItemRequestDto;
 import innowise.order_service.dto.OrderRequestDto;
@@ -8,6 +10,7 @@ import innowise.order_service.dto.Status;
 import innowise.order_service.dto.UpdateOrderDto;
 import innowise.order_service.entity.Order;
 import innowise.order_service.entity.OrderItem;
+import innowise.order_service.kafka.KafkaOrderProducer;
 import innowise.order_service.mapper.OrderMapper;
 import innowise.order_service.repository.OrderRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -16,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -27,6 +31,7 @@ public class OrderService {
     public final OrderMapper orderMapper;
     public final UserServiceClient userServiceClient;
     public final ItemService itemService;
+    public final KafkaOrderProducer kafkaOrderProducer;
 
     @Transactional
     public OrderResponseDto createOrder(OrderRequestDto orderRequestDto) {
@@ -34,6 +39,14 @@ public class OrderService {
         order.setOrderItems(getOrderItems(order, orderRequestDto.getOrderItems()));
         order.setStatus(Status.SUCCESS);
         Order updatedOrder = orderRepository.save(order);
+
+        OrderEvent event = OrderEvent.builder()
+                .id(updatedOrder.getId())
+                .userId(updatedOrder.getUserId())
+                .paymentAmount(getTotalSum(updatedOrder))
+                .build();
+        kafkaOrderProducer.sendCreateOrder(event);
+
         return addUserInfoToOrderResponse(orderMapper.toDto(updatedOrder));
     }
 
@@ -107,5 +120,20 @@ public class OrderService {
             log.warn("Failed to fetch user info for userId: {}", orderResponseDto.getUserId(), e);
         }
         return orderResponseDto;
+    }
+
+    private BigDecimal getTotalSum(Order order) {
+        return order.getOrderItems().stream()
+                .map(orderItem -> BigDecimal.valueOf(
+                        orderItem.getItem().getPrice() * (orderItem.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public void changeStatus(PaymentEvent event) {
+        Order order = orderRepository.findById(event.orderId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        String.format("There is no order with id %d", event.orderId())));
+        order.setStatus(Status.valueOf(String.valueOf(event.status())));
+        orderRepository.save(order);
     }
 }

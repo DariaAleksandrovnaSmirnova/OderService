@@ -11,6 +11,9 @@ import innowise.order_service.entity.Item;
 import innowise.order_service.entity.Order;
 import innowise.order_service.entity.OrderItem;
 import innowise.order_service.repository.OrderRepository;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,12 +21,18 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.apache.kafka.common.serialization.StringDeserializer;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -32,6 +41,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @Testcontainers
@@ -54,6 +64,8 @@ class OrderControllerIT extends BaseIT {
     public static final Long ITEM_ID = 1L;
     public static final Long USER_ID = 123L;
     public static final Integer QUANTITY = 2;
+
+    private static final String ORDER_TOPIC = "CREATE_ORDER";
 
     private Order order;
     private OrderItemRequestDto orderItemRequestDto;
@@ -107,15 +119,22 @@ class OrderControllerIT extends BaseIT {
                 .orderItems(List.of(orderItemRequestDto))
                 .build();
 
-        mockMvc.perform(post("/orders")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(orderRequestDto)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.userId").value(USER_ID))
-                .andExpect(jsonPath("$.status").value("SUCCESS"))
-                .andExpect(jsonPath("$.user.id").value(USER_ID))
-                .andExpect(jsonPath("$.user.name").value("John"))
-                .andExpect(jsonPath("$.orderItems.length()").value(1));
+        try (Consumer<String, Object> consumer = createConsumer()) {
+            consumer.subscribe(Collections.singletonList(ORDER_TOPIC));
+            mockMvc.perform(post("/orders")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(orderRequestDto)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.userId").value(USER_ID))
+                    .andExpect(jsonPath("$.status").value("SUCCESS"))
+                    .andExpect(jsonPath("$.user.id").value(USER_ID))
+                    .andExpect(jsonPath("$.user.name").value("John"))
+                    .andExpect(jsonPath("$.orderItems.length()").value(1));
+            await().untilAsserted(() -> {
+                ConsumerRecord<String, Object> record = KafkaTestUtils.getSingleRecord(consumer, ORDER_TOPIC);
+                assert record != null;
+            });
+        }
     }
 
     @Test
@@ -233,4 +252,20 @@ class OrderControllerIT extends BaseIT {
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest());
     }
+
+    private Consumer<String, Object> createConsumer() {
+        Map<String, Object> consumerProps = Map.of(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA_CONTAINER.getBootstrapServers(),
+                ConsumerConfig.GROUP_ID_CONFIG, "test-group",
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class,
+                JsonDeserializer.TRUSTED_PACKAGES, "*"
+        );
+
+        DefaultKafkaConsumerFactory<String, Object> consumerFactory =
+                new DefaultKafkaConsumerFactory<>(consumerProps);
+        return consumerFactory.createConsumer();
+    }
+
 }

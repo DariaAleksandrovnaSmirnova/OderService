@@ -2,7 +2,7 @@ spring:
   profiles:
     active: dev, test
   datasource:
-    url: jdbc:postgresql://localhost:5432/order_service_db
+    url: jdbc:postgresql://order-service-db:5432/order_service_db
     username: daria
     password: password
     driver-class-name: org.postgresql.Driver
@@ -17,11 +17,38 @@ spring:
         format_sql: true
 
   redis:
-    host: localhost
+    host: redis
     port: 6379
 
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      group-id: order-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    properties:
+      retries: 5
+      retry.backoff.ms: 1000
+
+kafka:
+  topic:
+    order:
+      name: CREATE_ORDER
+      partitions: 1
+      replicas: 1
+    payment:
+      name: CREATE_PAYMENT
+      partitions: 1
+      replicas: 1
 
 server:
   port: 8082
@@ -30,10 +57,8 @@ logging:
   level:
     root: info
 
-user-service:
-  host: localhost
-  port: 8080
-
-auth-service:
-  host: localhost
-  port: 8081
+service:
+  user:
+    url: http://user-service:8080
+  auth:
+    url: http://auth-service:8081

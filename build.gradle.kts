@@ -7,10 +7,6 @@ plugins {
 group = "by.innowise"
 version = "1.0-SNAPSHOT"
 
-repositories {
-    mavenCentral()
-}
-
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
@@ -35,12 +31,19 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     /**
+     * Kafka
+     */
+    implementation("org.springframework.kafka:spring-kafka")
+    testImplementation("org.springframework.kafka:spring-kafka-test")
+
+    /**
      * Test containers
      */
     implementation(platform("org.testcontainers:testcontainers-bom:1.19.3"))
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("com.redis.testcontainers:testcontainers-redis-junit-jupiter:1.4.6")
+    testImplementation("org.testcontainers:kafka")
 
     /**
      * Tests
@@ -52,6 +55,7 @@ dependencies {
     /**
      * Utils & Logging
      */
+    implementation("com.github.DariaAleksandrovnaSmirnova:common:v1.0.0:plain")
     implementation("org.slf4j:slf4j-api:2.0.7")
     implementation("org.mapstruct:mapstruct:1.5.3.Final")
     annotationProcessor("org.mapstruct:mapstruct-processor:1.5.3.Final")
